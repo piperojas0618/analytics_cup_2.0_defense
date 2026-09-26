@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Valuable-Space Denial — ALL thresholds live here. Never bury a filter in a
+# notebook. See PROJECT_PLAN.md §5.
+# ---------------------------------------------------------------------------
+
+data:
+  # Folder that contains one sub-folder per match_id (SkillCorner opendata layout)
+  matches_dir: ../opendata/data/matches
+  fps: 10
+
+frame_filters:
+  require_possession: true          # §2.2 — transform undefined without it
+  # Attacking team comes from the phase (event-based) when available, else from
+  # tracking possession_group. They disagree on ~13% of in-play frames (lag in
+  # short chaotic/transition phases). true = drop those frames.
+  require_possession_consistent: false
+  require_in_phase: true            # frame inside a phase of play
+  min_detected_outfield_defenders: 7   # of 10 outfield defenders
+  require_ball_xy: true             # finite ball_x / ball_y
+  require_ball_detected: false      # stricter: is_detected_ball == True
+  # Danger zone = attacker's final third (defending team's defensive third),
+  # in normalised coords (team in possession attacks toward +x).
+  danger_zone_visible_min_frac: 0.5 # share of danger zone inside camera polygon
+  visibility_grid_step_m: 2.0
+  excluded_oop_phase_types: [ defending_set_play, chaotic ]
+
+phase_filters:
+  oop_phase_types:
+    - low_block
+    - medium_block
+    - high_block
+    - defending_transition
+    - defending_quick_break
+    - defending_direct          # present in the data, missing from plan v2 list — remove if unwanted
+  third_end: attacking_third
+  min_frame_pass_rate: 0.6         # ≥60% of a phase's frames must pass frame filters
+
+gate1:
+  min_phase_survival: 0.40         # below this → pivot before modelling
+
+audit:
+  heatmap_bin_m: 5.0

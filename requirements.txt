@@ -7,6 +7,8 @@ mplsoccer
 polars
 humanize
 pyarrow
+pyyaml>=6.0
+pytest>=7.4
 # SkillCorner Viz (optional depends on colab usage)
 skillcorner==3.1
 skillcornerviz
