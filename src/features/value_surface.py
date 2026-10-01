@@ -64,8 +64,30 @@ def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int
     return res
 
 
+def normalised_velocities(match: Match, frames_norm: pd.DataFrame, tracking_norm: pd.DataFrame,
+                          fps: float = 10.0, window_length: int = 9, polyorder: int = 2,
+                          max_speed_mps: float | None = None) -> pd.DataFrame:
+    """tracking_norm plus vx, vy, speed in the NORMALISED frame.
+
+    Differentiate in RAW coordinates: the possession flip rotates the pitch
+    180° at every turnover, so in normalised coords each player jumps from
+    (x, y) to (-x, -y). The flip is one rotation per frame, so the velocity
+    rotates the same way: v_norm = sign * v_raw.
+    """
+    raw = match.tracking[["frame", "player_id", "x", "y", "is_detected"]]
+    v = savitzky_golay(raw, fps=fps, window_length=window_length, polyorder=polyorder,
+                       max_speed_mps=max_speed_mps)[["frame", "player_id", "vx", "vy"]]
+    t = (tracking_norm.drop(columns=["vx", "vy", "speed"], errors="ignore")
+         .merge(v, on=["frame", "player_id"], how="left")
+         .merge(frames_norm[["frame", "sign"]], on="frame", how="left"))
+    t["vx"] = t.vx * t.sign
+    t["vy"] = t.vy * t.sign
+    t["speed"] = np.hypot(t.vx, t.vy)
+    return t.drop(columns=["sign"])
+
+
 def vxy(events: pd.DataFrame, pitch_length: float, pitch_width: float,
-        method: str = "grid", *, loc: str = "end", bin_m: float = 2.0,
+        method: str = "grid", *, loc: str = "end", bin_m: float = 5.0,
         bandwidth: float = 3.0) -> pd.DataFrame:
     """Value surface V(x, y): xThreat of ``passing_option`` events, mapped onto
     the pitch at the *option's own* location (not the passer's).
