@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.features.value_surface import savitzky_golay, vxy
+from src.features.value_surface import savitzky_golay, vxy, in_six_yard_box
 
 
 # ---------------------------------------------------------------------------
@@ -148,3 +148,13 @@ def test_savitzky_golay_mislabelled_teleport_is_treated_as_a_gap():
     assert out.speed.max() < 12.0 + 1e-6
     without_guard = savitzky_golay(tr, fps=10.0, window_length=9, polyorder=2, max_speed_mps=None)
     assert without_guard.speed.max() > 50.0  # confirms the teleport does spike speed without the guard
+
+
+# --------------------------------------------------------------------------
+# in_six_yards_box
+# --------------------------------------------------------------------------
+def test_in_six_yard_box_is_attacking_end_only():
+    x = np.array([50.0, -50.0, 47.0, 52.5, 52.6, 50.0])
+    y = np.array([0.0, 0.0, 0.0, 9.16, 0.0, 9.2])
+    #            inside  own box  edge  corner  behind goal  too wide
+    assert in_six_yard_box(x, y, 105).tolist() == [True, False, True, True, False, False]

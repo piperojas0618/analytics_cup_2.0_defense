@@ -6,6 +6,22 @@ from scipy.signal import savgol_filter
 
 from ..data_io.load import Match
 
+SIX_YARD_DEPTH_M = 5.5
+SIX_YARD_HALF_WIDTH_M = 9.16
+
+
+def in_six_yard_box(x, y, pitch_length):
+    """True where (x, y) lies in the ATTACKING six-yard box (normalised coords).
+
+    Uses signed x on purpose: abs(x) would also count the defending team's own
+    box, where most passing options are back-passes to the keeper (xThreat ≈ 0).
+    ``pitch_length`` can be a scalar or one value per row (pitches are 104-106 m).
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    goal_x = np.asarray(pitch_length, dtype=float) / 2
+    return (x >= goal_x - SIX_YARD_DEPTH_M) & (x <= goal_x) & (np.abs(y) <= SIX_YARD_HALF_WIDTH_M)
+
 
 def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int = 9,
                    polyorder: int = 2, max_speed_mps: float | None = None) -> pd.DataFrame:
@@ -87,7 +103,7 @@ def normalised_velocities(match: Match, frames_norm: pd.DataFrame, tracking_norm
 
 
 def vxy(events: pd.DataFrame, pitch_length: float, pitch_width: float,
-        method: str = "grid", *, loc: str = "end", bin_m: float = 5.0,
+        method: str = "grid", *, loc: str = "end", bin_m: float = 2.0,
         bandwidth: float = 3.0) -> pd.DataFrame:
     """Value surface V(x, y): xThreat of ``passing_option`` events, mapped onto
     the pitch at the *option's own* location (not the passer's).

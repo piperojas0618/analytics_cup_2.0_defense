@@ -41,7 +41,7 @@ gate1:
   min_phase_survival: 0.40         # below this → pivot before modelling
 
 audit:
-  heatmap_bin_m: 5.0
+  heatmap_bin_m: 2.0
 
 velocities:
   # Savitzky-Golay smoothing window over detected-only runs (features.value_surface.savitzky_golay).
