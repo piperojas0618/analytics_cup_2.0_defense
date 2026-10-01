@@ -42,3 +42,12 @@ gate1:
 
 audit:
   heatmap_bin_m: 5.0
+
+velocities:
+  # Savitzky-Golay smoothing window over detected-only runs (features.value_surface.savitzky_golay).
+  window_length: 9
+  polyorder: 2
+  # Human sprint speed tops out ~10-10.5 m/s (data: Usain Bolt's peak ~12.4 m/s).
+  # A detected-to-detected step implying more than this is a tracking artefact
+  # (e.g. a camera-cut mis-projection), not a real run — treat it as a gap.
+  max_speed_mps: 12.0

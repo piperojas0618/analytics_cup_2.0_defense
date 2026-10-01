@@ -51,9 +51,9 @@ def test_vxy_kde_has_no_nan_and_is_bounded_by_samples():
 def test_vxy_rejects_unknown_method_and_loc():
     events = _synthetic_alignment()
     with pytest.raises(ValueError):
-        vxy(events, method="nonsense")
+        vxy(events, pitch_length=20, pitch_width=20, method="nonsense")
     with pytest.raises(ValueError):
-        vxy(events, loc="middle")
+        vxy(events, pitch_length=20, pitch_width=20, loc="middle")
 
 
 def test_vxy_loc_start_vs_end_select_different_columns():
@@ -136,3 +136,15 @@ def test_savitzky_golay_rejects_even_window():
     tr = _constant_velocity_tracking(n=10)
     with pytest.raises(ValueError):
         savitzky_golay(tr, window_length=8)
+
+
+def test_savitzky_golay_mislabelled_teleport_is_treated_as_a_gap():
+    """A same-frame-marked-detected teleport (broadcast camera-cut artefact,
+    not a real gap) must not get smoothed into a velocity spike when
+    max_speed_mps is given."""
+    tr = _constant_velocity_tracking(n=20, vx=2.0, vy=0.0)
+    tr.loc[tr.frame == 10, "x"] += 100.0  # ~1000 m/s implied jump, still "detected"
+    out = savitzky_golay(tr, fps=10.0, window_length=9, polyorder=2, max_speed_mps=12.0)
+    assert out.speed.max() < 12.0 + 1e-6
+    without_guard = savitzky_golay(tr, fps=10.0, window_length=9, polyorder=2, max_speed_mps=None)
+    assert without_guard.speed.max() > 50.0  # confirms the teleport does spike speed without the guard

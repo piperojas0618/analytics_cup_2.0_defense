@@ -8,7 +8,7 @@ from ..data_io.load import Match
 
 
 def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int = 9,
-                    polyorder: int = 2) -> pd.DataFrame:
+                   polyorder: int = 2, max_speed_mps: float | None = None) -> pd.DataFrame:
     """Smoothed velocity (vx, vy, speed) per (match_id, player_id, frame).
 
     SkillCorner's tracking file is already gap-filled by extrapolation
@@ -19,6 +19,14 @@ def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int
     ``is_detected == True`` frames; a gap (an undetected frame, or a missing
     frame number) ends the current run. Runs shorter than ``window_length``
     are left NaN — too few points for a stable 2nd-order fit.
+
+    ``is_detected`` isn't a perfect gap flag though: broadcast tracking
+    occasionally mis-projects a position for a frame or two (e.g. on a camera
+    cut) while still marking it detected — this shows up as a ~100 m,
+    one-frame teleport, often hitting several players at the same frame. If
+    ``max_speed_mps`` is given, a detected-to-detected step implying a higher
+    speed than that is treated as a run break too, same as a real gap,
+    instead of being smoothed into a velocity spike.
     """
     group_cols = [c for c in ("match_id", "player_id") if c in tracking.columns]
     dt = 1.0 / fps
@@ -31,6 +39,13 @@ def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int
         detected = g.is_detected.to_numpy()
         gap = g.frame.diff().to_numpy() != 1  # first row's NaN diff -> False, not a gap
         gap[0] = False
+        if max_speed_mps is not None:
+            frame_diff = g.frame.diff().to_numpy()
+            step_disp = np.hypot(g.x.diff().to_numpy(), g.y.diff().to_numpy())
+            with np.errstate(invalid="ignore", divide="ignore"):
+                implied_speed = step_disp / (frame_diff * dt)
+            jump = np.where(frame_diff > 0, implied_speed > max_speed_mps, False)
+            gap = gap | jump
         run_id = (~detected | gap).cumsum()
 
         vx = np.full(len(g), np.nan)
@@ -49,8 +64,8 @@ def savitzky_golay(tracking: pd.DataFrame, fps: float = 10.0, window_length: int
     return res
 
 
-def vxy(events: pd.DataFrame, method: str = "grid", *, loc: str = "end",
-        bin_m: float = 5.0, pitch_length: float = 105.0, pitch_width: float = 68.0,
+def vxy(events: pd.DataFrame, pitch_length: float, pitch_width: float,
+        method: str = "grid", *, loc: str = "end", bin_m: float = 2.0,
         bandwidth: float = 3.0) -> pd.DataFrame:
     """Value surface V(x, y): xThreat of ``passing_option`` events, mapped onto
     the pitch at the *option's own* location (not the passer's).
@@ -112,6 +127,7 @@ def vxy(events: pd.DataFrame, method: str = "grid", *, loc: str = "end",
         from scipy.interpolate import SmoothBivariateSpline
         spline = SmoothBivariateSpline(x, y, v, kx=3, ky=3)
         V = spline(xc, yc)
+        V = V.clip(0, 1)
     else:
         raise ValueError(f"unknown method {method!r}: use 'grid', 'kde' or 'spline'")
 
