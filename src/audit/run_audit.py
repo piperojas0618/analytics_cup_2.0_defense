@@ -19,12 +19,12 @@ from . import checks, occlusion
 
 @dataclass
 class AuditResult:
-    frames: pd.DataFrame        # frame-level quality flags, all matches
-    phases: pd.DataFrame        # eligible phases with survival verdict
-    heat_def: pd.DataFrame      # detection counts by location (defenders)
-    roles: pd.DataFrame         # detection counts by role
-    strings: pd.DataFrame       # §2.3 reconciliation, per match
-    alignment: pd.DataFrame     # §3.3 event↔tracking check, per match
+    frames: pd.DataFrame  # frame-level quality flags, all matches
+    phases: pd.DataFrame  # eligible phases with survival verdict
+    heat_def: pd.DataFrame  # detection counts by location (defenders)
+    roles: pd.DataFrame  # detection counts by role
+    strings: pd.DataFrame  # §2.3 reconciliation, per match
+    alignment: pd.DataFrame  # §3.3 event↔tracking check, per match
 
     def summary(self, cfg: dict) -> pd.DataFrame:
         fr = self.frames
@@ -45,8 +45,15 @@ class AuditResult:
         s["GATE 1"] = "PASS" if s["phase survival rate"] >= s["GATE 1 threshold"] else "FAIL"
         return pd.Series(s, name="value").to_frame()
 
+    def save_csv(self):
+        out = REPO_ROOT / "outputs" / "tables"
+        out.mkdir(parents=True, exist_ok=True)
+        self.phases.to_csv(out / "01_phase_survival.csv", index=False)
+        self.alignment.to_csv(out / "01_event_alignment.csv", index=False)
 
-def run(match_ids: list[int] | None = None, cfg: dict | None = None, verbose: bool = True) -> AuditResult:
+
+def run(match_ids: list[int] | None = None, cfg: dict | None = None, analysis: bool = False,
+        verbose: bool = True) -> AuditResult:
     cfg = cfg or load_config()
     mdir = cfg["data"]["matches_dir"]
     match_ids = match_ids or list_match_ids(mdir)
@@ -56,7 +63,7 @@ def run(match_ids: list[int] | None = None, cfg: dict | None = None, verbose: bo
         t0 = time.time()
         frames, tracking = build_normalised(m)
         fq = occlusion.frame_quality(frames, tracking, m, cfg)
-        ph = occlusion.phase_survival(fq, m.phases, cfg)
+        ph = occlusion.phase_survival(fq, m.phases, cfg, analysis)
         ph["match_id"] = m.match_id
 
         # Heatmap over frames of eligible phases only (where VSD will be computed)
@@ -68,16 +75,22 @@ def run(match_ids: list[int] | None = None, cfg: dict | None = None, verbose: bo
 
         s = checks.reconcile_strings(m.events, m.phases)
         s["match_id"] = m.match_id
-        a = checks.event_tracking_alignment(m, frames, tracking)
+        a = checks.event_tracking_alignment(m, tracking)
 
-        F.append(fq); P.append(ph); H.append(h); R.append(r); S.append(s); A.append(a)
+        F.append(fq);
+        P.append(ph);
+        H.append(h);
+        R.append(r);
+        S.append(s);
+        A.append(a)
         if verbose:
             print(f"{m.match_id}: {len(ph)} eligible phases, {ph.survives.mean():.0%} survive "
                   f"({time.time() - t0:.1f}s)")
         del m, frames, tracking
+
     return AuditResult(pd.concat(F, ignore_index=True), pd.concat(P, ignore_index=True),
                        pd.concat(H, ignore_index=True), pd.concat(R, ignore_index=True),
-                       pd.concat(S, ignore_index=True), pd.DataFrame(A))
+                       pd.concat(S, ignore_index=True), pd.concat(A, ignore_index=True))
 
 
 if __name__ == "__main__":

@@ -37,27 +37,37 @@ def reconcile_strings(events: pd.DataFrame, phases: pd.DataFrame) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
-def event_tracking_alignment(match: Match, frames_norm: pd.DataFrame,
-                             tracking_norm: pd.DataFrame, n: int = 500) -> dict:
-    """Distance between a player_possession event's (x_start, y_start) and the
-    carrier's tracking position at frame_start.
+def event_tracking_alignment(match: Match, tracking_norm: pd.DataFrame) -> pd.DataFrame:
+    """Distance between an event's own x/y and the tracked player's position
+    at the matching frame.
 
-    * ``err_norm``: event x/y as-is vs NORMALISED tracking — should be < ~1 m
-      (events are already direction-normalised, in metres).
-    * ``err_raw``: ``event_xy_to_raw`` vs RAW tracking — should also be < ~1 m.
+    * ``player_possession``: ball carrier's (x_start, y_start) at frame_start.
+    * ``passing_option``: the option's (x_end, y_end) at frame_end — the
+      location the option's value (``xthreat``) is attached to, used
+      downstream for the value surface (``features.value_surface.vxy``).
+
+    ``d_norm``: event x/y as-is vs NORMALISED tracking — should be < ~1 m
+    (events are already direction-normalised, in metres).
+    ``d_raw``: ``event_xy_to_raw`` vs RAW tracking — should also be < ~1 m.
     """
-    ev = match.events[match.events.event_type == "player_possession"]
-    ev = ev.dropna(subset=["x_start", "y_start", "player_id"]).head(n)
-    ev = event_xy_to_raw(ev)
+    specs = [
+        ("player_possession", "frame_start", "x_start", "y_start"),
+        ("passing_option", "frame_end", "x_end", "y_end"),
+    ]
     raw = match.tracking[["frame", "player_id", "x", "y"]]
-    j = ev.merge(raw, left_on=["frame_start", "player_id"], right_on=["frame", "player_id"])
-    d_raw = np.hypot(j.x_start_raw - j.x, j.y_start_raw - j.y)
-    jn = ev.merge(tracking_norm[["frame", "player_id", "x", "y"]],
-                  left_on=["frame_start", "player_id"], right_on=["frame", "player_id"])
-    d_norm = np.hypot(jn.x_start - jn.x, jn.y_start - jn.y)
-    return {"match_id": match.match_id, "n_raw": len(j),
-            "median_err_raw_m": float(np.median(d_raw)) if len(j) else np.nan,
-            "p90_err_raw_m": float(np.quantile(d_raw, .9)) if len(j) else np.nan,
-            "n_norm": len(jn),
-            "median_err_norm_m": float(np.median(d_norm)) if len(jn) else np.nan,
-            "p90_err_norm_m": float(np.quantile(d_norm, .9)) if len(jn) else np.nan}
+    norm = tracking_norm[["frame", "player_id", "x", "y"]]
+    out = []
+    for event_type, frame_col, x_col, y_col in specs:
+        ev = match.events[match.events.event_type == event_type]
+        ev = ev.dropna(subset=[x_col, y_col, "player_id"])
+        ev = event_xy_to_raw(ev)
+        j = ev.merge(raw, left_on=[frame_col, "player_id"], right_on=["frame", "player_id"])
+        d_raw = np.hypot(j[f"{x_col}_raw"] - j.x, j[f"{y_col}_raw"] - j.y)
+        jn = ev.merge(norm, left_on=[frame_col, "player_id"], right_on=["frame", "player_id"])
+        d_norm = np.hypot(jn[x_col] - jn.x, jn[y_col] - jn.y)
+        jn["d_norm"] = d_norm
+        jn["d_raw"] = d_raw
+        jn["match_id"] = match.match_id
+        jn["check_frame"] = frame_col
+        out.append(jn)
+    return pd.concat(out, ignore_index=True)

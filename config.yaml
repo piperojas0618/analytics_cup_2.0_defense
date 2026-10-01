@@ -34,6 +34,8 @@ phase_filters:
     - defending_direct          # present in the data, missing from plan v2 list — remove if unwanted
   third_end: attacking_third
   min_frame_pass_rate: 0.6         # ≥60% of a phase's frames must pass frame filters
+  final_phase_types:
+    - low_block
 
 gate1:
   min_phase_survival: 0.40         # below this → pivot before modelling

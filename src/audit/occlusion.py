@@ -113,19 +113,23 @@ def frame_quality(frames: pd.DataFrame, tracking: pd.DataFrame, match: Match,
 # ---------------------------------------------------------------------------
 # Phase-level survival
 # ---------------------------------------------------------------------------
-def eligible_phases(phases: pd.DataFrame, cfg: dict) -> pd.Series:
+def eligible_phases(phases: pd.DataFrame, cfg: dict, analysis: bool) -> pd.Series:
     pf = cfg["phase_filters"]
-    return (phases.team_out_of_possession_phase_type.isin(pf["oop_phase_types"])
-            & (phases.third_end == pf["third_end"]))
+    if not analysis:
+        return (phases.team_out_of_possession_phase_type.isin(pf["final_phase_types"])
+                & (phases.third_end == pf["third_end"]))
+    else:
+        return (phases.team_out_of_possession_phase_type.isin(pf["oop_phase_types"])
+                & (phases.third_end == pf["third_end"]))
 
 
-def phase_survival(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def phase_survival(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict, analysis: bool) -> pd.DataFrame:
     """Per eligible phase: frame pass rate per filter and the survival verdict.
 
     Frames of the phase that were dropped by the transform (no attacking team)
     count as failing — the denominator is the phase's full frame span.
     """
-    ph = phases[eligible_phases(phases, cfg)].copy()
+    ph = phases[eligible_phases(phases, cfg, analysis)].copy()
     ph["n_frames"] = ph.frame_end - ph.frame_start
     flag_cols = [c for c in fq.columns if c.startswith("f_")] + ["passes_all"]
     agg = fq[fq.phase_index >= 0].groupby("phase_index")[flag_cols].sum()
@@ -138,7 +142,7 @@ def phase_survival(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict) -> pd.Data
     return ph
 
 
-def survival_sensitivity(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict,
+def survival_sensitivity(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict, analysis: bool = False,
                          det_floors=(5, 6, 7, 8, 9),
                          vis_mins=(0.0, 0.25, 0.5, 0.75)) -> pd.DataFrame:
     """Phase survival rate over a grid of (detection floor, visibility min).
@@ -154,6 +158,8 @@ def survival_sensitivity(fq: pd.DataFrame, phases: pd.DataFrame, cfg: dict,
         base &= fq.f_ball_detected
     if ff.get("require_possession_consistent"):
         base &= fq.f_possession_consistent
+
+    phases = phases[eligible_phases(phases, cfg, analysis)].copy()
     ph = phases[["match_id", "phase_index", "frame_start", "frame_end"]].copy()
     ph["n_frames"] = ph.frame_end - ph.frame_start
     min_rate = cfg["phase_filters"]["min_frame_pass_rate"]

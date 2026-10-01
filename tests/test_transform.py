@@ -132,6 +132,8 @@ def test_real_defending_gk_at_positive_x(mid):
 def test_real_events_already_normalised(mid):
     from src.audit.checks import event_tracking_alignment
     m = load_match(_DIR, mid)
-    f, tn = build_normalised(m)
-    a = event_tracking_alignment(m, f, tn)
-    assert a["median_err_norm_m"] < 1.0 and a["median_err_raw_m"] < 1.0
+    _, tn = build_normalised(m)
+    a = event_tracking_alignment(m, tn)
+    assert set(a.event_type) == {"player_possession", "passing_option"}
+    assert (a.groupby("event_type").d_norm.median() < 1.0).all()
+    assert (a.groupby("event_type").d_raw.median() < 1.0).all()
